@@ -1,22 +1,35 @@
-#!name = YouTube去广告
-#!desc = 支持pip，后台播放，下载视频外线
-#!author = Maasea (modified by Grok)
-#!homepage = https://whatshub.top
-#!icon = https://raw.githubusercontent.com/Koolson/Qure/master/IconSet/Color/YouTube.png
+let body = $response.body;
+let obj = JSON.parse(body);
 
-[Rule]
-AND,((DOMAIN-SUFFIX,googlevideo.com), (PROTOCOL,UDP)),REJECT
-AND,((DOMAIN,youtubei.googleapis.com), (PROTOCOL,UDP)),REJECT
+// Xử lý quảng cáo, PiP, background play (giữ nguyên logic gốc)
+if (obj.playerResponse) {
+    if (obj.playerResponse.adPlacements) {
+        obj.playerResponse.adPlacements = [];
+    }
+    if (obj.playerResponse.playerAds) {
+        obj.playerResponse.playerAds = [];
+    }
+    obj.playerResponse.playabilityStatus.status = "OK";
+    obj.playerResponse.backgroundability = { backgroundable: true }; // Phát trong nền
+}
 
-[URL Rewrite]
-(^https?:\/\/[\w-]+\.googlevideo\.com\/(?!dclk_video_ads).+?)&ctier=L(&.+?),ctier,(.+) $1$2$3 302
-^https?:\/\/[\w-]+\.googlevideo\.com\/(?!(dclk_video_ads|videoplayback\?)).+&oad _ reject-200
-^https?:\/\/(www|s)\.youtube\.com\/api\/stats\/ads _ reject-200
-^https?:\/\/(www|s)\.youtube\.com\/(pagead|ptracking) _ reject-200
-^https?:\/\/s\.youtube\.com\/api\/stats\/qoe\?adcontext _ reject-200
+// Thêm tính năng tải video ngoại tuyến
+const args = JSON.parse($argument || '{}');
+if (args.enableOffline === true) {
+    if (obj.playerResponse) {
+        obj.playerResponse.offlineability = {
+            offlineable: true, // Cho phép tải video
+            reason: "" // Xóa lý do chặn tải (nếu có)
+        };
+    }
+    if (obj.offlineability) {
+        obj.offlineability.offlineable = true;
+    }
+}
 
-[Script]
-youtube.response = type=http-response,pattern=^https:\/\/youtubei\.googleapis\.com\/youtubei\/v1\/(browse|next|player|search|reel\/reel_watch_sequence|guide|account\/get_setting|get_watch),requires-body=1,max-size=-1,binary-body-mode=1,engine={{{脚本执行引擎}}},script-path=https://raw.githubusercontent.com/yourusername/shadowrocket-scripts/main/youtube.response.js,argument="{"lyricLang":"{{{歌词翻译语言}}}","captionLang":"{{{字幕翻译语言}}}","blockUpload":{{{屏蔽上传按钮}}},"blockImmersive":{{{屏蔽选段按钮}}},"enableOffline":true,"debug":{{{启用调试模式}}}}"
+// Xử lý các endpoint khác
+if (obj.response) {
+    obj.response.isPremium = true; // Giả lập Premium
+}
 
-[MITM]
-hostname = %APPEND% -redirector*.googlevideo.com,*.googlevideo.com,www.youtube.com,s.youtube.com,youtubei.googleapis.com
+$done({ body: JSON.stringify(obj) });
